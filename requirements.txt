@@ -1,0 +1,6 @@
+flask
+gunicorn
+prometheus-flask-exporter
+prometheus-client
+pytest
+requests
