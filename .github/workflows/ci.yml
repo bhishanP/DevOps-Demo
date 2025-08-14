@@ -88,9 +88,8 @@ jobs:
             --from-file=grafana/dashboards \
             --dry-run=client -o yaml | kubectl apply -f -
 
-          # Deployments & Services (use the two files below)
-          kubectl apply -f k8s/prometheus-deploy.yaml
-          kubectl apply -f k8s/grafana-deploy.yaml
+          kubectl apply -f k8s/prometheus_deploy.yml
+          kubectl apply -f k8s/grafana_deploy.yml
 
           kubectl -n monitoring rollout status deploy/prometheus
           kubectl -n monitoring rollout status deploy/grafana
