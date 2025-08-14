@@ -2,16 +2,18 @@ name: CI
 on:
   push: { branches: [ main ] }
   pull_request: { branches: [ main ] }
+  workflow_dispatch: {}
 
 jobs:
   build-smoketest-push-deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, local-k8s]
     permissions:
       contents: read
       packages: write
     env:
-      OWNER_LOWER: "bhishanp"
+      OWNER_LOWER: bhishanp
       KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -44,7 +46,7 @@ jobs:
           curl -fsS http://localhost:8000/metrics | head -n 5
           docker rm -f app
 
-      # Build again and push
+      # Build again and push (uses cache)
       - name: Build & push image
         uses: docker/build-push-action@v6
         with:
@@ -54,14 +56,38 @@ jobs:
           tags: |
             ghcr.io/${{ env.OWNER_LOWER }}/flask-prom-grafana-devops:latest
             ghcr.io/${{ env.OWNER_LOWER }}/flask-prom-grafana-devops:${{ github.sha }}
-            
-      - name: Deploy monitoring (Prometheus & Grafana)
+
+      - name: Set up kubectl
+        if: ${{ env.KUBE_CONFIG != '' }}
+        uses: azure/setup-kubectl@v4
+
+      - name: Write kubeconfig
         if: ${{ env.KUBE_CONFIG != '' }}
         run: |
-          # Namespace (idempotent)
+          mkdir -p "$HOME/.kube"
+          printf '%s' "${KUBE_CONFIG}" > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+          kubectl cluster-info
+
+      # --- Deploy Flask app ---
+      - name: Deploy app manifests
+        run: |
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/ingress.yaml || true
+          kubectl apply -f k8s/hpa.yaml || true
+
+      - name: Set image to this commit
+        run: |
+          kubectl set image deploy/flask-prom-grafana-devops \
+            web=ghcr.io/${{ env.OWNER_LOWER }}/flask-prom-grafana-devops:${{ github.sha }}
+          kubectl rollout status deploy/flask-prom-grafana-devops
+
+      # --- Deploy Prometheus & Grafana ---
+      - name: Deploy monitoring (Prometheus & Grafana)
+        run: |
           kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
 
-          # ConfigMaps from your repo folders
+          # Turn your repo folders into ConfigMaps
           kubectl create configmap prometheus-config -n monitoring \
             --from-file=prometheus/prometheus.yml \
             --dry-run=client -o yaml | kubectl apply -f -
@@ -74,10 +100,9 @@ jobs:
             --from-file=grafana/dashboards \
             --dry-run=client -o yaml | kubectl apply -f -
 
-          # Apply Deployments & Services
+          # Deployments & Services (use the two files below)
           kubectl apply -f k8s/prometheus-deploy.yaml
           kubectl apply -f k8s/grafana-deploy.yaml
 
-          # Wait for rollouts
           kubectl -n monitoring rollout status deploy/prometheus
           kubectl -n monitoring rollout status deploy/grafana

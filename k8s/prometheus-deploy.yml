@@ -28,8 +28,7 @@ spec:
               mountPath: /prometheus
       volumes:
         - name: cfg
-          configMap:
-            name: prometheus-config
+          configMap: { name: prometheus-config }
         - name: data
           emptyDir: {}
 ---
