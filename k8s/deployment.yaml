@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: flask-prom-grafana-devops:local
+          image: flask-prom-grafana-devops:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000

@@ -1,7 +1,7 @@
 services:
   web:
     build: .
-    image: flask-prom-grafana-devops:local
+    image: flask-prom-grafana-devops:latest
     ports:
       - "8000:8000"
   prometheus:

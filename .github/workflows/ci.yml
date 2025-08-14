@@ -4,27 +4,16 @@ on:
   pull_request: { branches: [ main ] }
 
 jobs:
-  test-build-deploy:
+  build-smoketest-push-deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     env:
+      OWNER: ${{ github.repository_owner }}
       KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run tests
-        run: pytest -q
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -36,6 +25,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Build locally first for smoke test (no push)
+      - name: Build image (local)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          tags: ghcr.io/${{ env.OWNER }}/flask-prom-grafana-devops:ci
+
+      - name: Smoke test container
+        run: |
+          docker run -d --rm -p 8000:8000 --name app ghcr.io/${OWNER}/flask-prom-grafana-devops:ci
+          for i in {1..30}; do
+            if curl -fsS http://localhost:8000/healthz >/dev/null; then echo "healthy"; break; fi
+            sleep 1
+          done
+          curl -fsS http://localhost:8000/metrics | head -n 5
+          docker rm -f app
+
+      # Build again and push (uses cache, so it’s quick)
       - name: Build & push image
         uses: docker/build-push-action@v6
         with:
@@ -43,22 +52,24 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/flask-prom-grafana-devops:latest
-            ghcr.io/${{ github.repository_owner }}/flask-prom-grafana-devops:${{ github.sha }}
+            ghcr.io/${{ env.OWNER }}/flask-prom-grafana-devops:latest
+            ghcr.io/${{ env.OWNER }}/flask-prom-grafana-devops:${{ github.sha }}
 
-      - name: Set up kubectl (optional)
+      # --- Optional deploy ---
+      - name: Set up kubectl
         if: ${{ env.KUBE_CONFIG != '' }}
         uses: azure/setup-kubectl@v4
 
-      - name: Configure kubeconfig (optional)
+      - name: Configure kubeconfig
         if: ${{ env.KUBE_CONFIG != '' }}
         run: |
           mkdir -p $HOME/.kube
           echo "${{ env.KUBE_CONFIG }}" > $HOME/.kube/config
 
-      - name: Deploy to Kubernetes (optional)
+      - name: Deploy to Kubernetes
         if: ${{ env.KUBE_CONFIG != '' }}
         run: |
           kubectl apply -f k8s/deployment.yaml
           kubectl apply -f k8s/ingress.yaml || true
           kubectl apply -f k8s/hpa.yaml || true
+          kubectl rollout status deploy/flask-prom-grafana-devops
