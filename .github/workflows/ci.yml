@@ -54,4 +54,30 @@ jobs:
           tags: |
             ghcr.io/${{ env.OWNER_LOWER }}/flask-prom-grafana-devops:latest
             ghcr.io/${{ env.OWNER_LOWER }}/flask-prom-grafana-devops:${{ github.sha }}
+            
+      - name: Deploy monitoring (Prometheus & Grafana)
+        if: ${{ env.KUBE_CONFIG != '' }}
+        run: |
+          # Namespace (idempotent)
+          kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
 
+          # ConfigMaps from your repo folders
+          kubectl create configmap prometheus-config -n monitoring \
+            --from-file=prometheus/prometheus.yml \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create configmap grafana-provisioning -n monitoring \
+            --from-file=grafana/provisioning \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create configmap grafana-dashboards -n monitoring \
+            --from-file=grafana/dashboards \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # Apply Deployments & Services
+          kubectl apply -f k8s/prometheus-deploy.yaml
+          kubectl apply -f k8s/grafana-deploy.yaml
+
+          # Wait for rollouts
+          kubectl -n monitoring rollout status deploy/prometheus
+          kubectl -n monitoring rollout status deploy/grafana

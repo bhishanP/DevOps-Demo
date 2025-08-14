@@ -20,8 +20,8 @@ spec:
     spec:
       containers:
         - name: web
-          image: flask-prom-grafana-devops:latest
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/bhishanp/flask-prom-grafana-devops:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
           readinessProbe:
