@@ -10,8 +10,7 @@ jobs:
       contents: read
       packages: write
     env:
-      OWNER: ${{ github.repository_owner }}
-      REPO: ${{ github.repository_owner }}/${{ github.event.repository.name }}
+      OWNER_LOWER: "bhishanp"
       KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
     steps:
       - uses: actions/checkout@v4
@@ -33,11 +32,11 @@ jobs:
           context: .
           file: ./Dockerfile
           load: true
-          tags: ghcr.io/${{ env.OWNER }}/flask-prom-grafana-devops:ci
+          tags: ghcr.io/${{ env.OWNER_LOWER }}/flask-prom-grafana-devops:ci
 
       - name: Smoke test container
         run: |
-          docker run -d --rm -p 8000:8000 --name app ghcr.io/${OWNER}/flask-prom-grafana-devops:ci
+          docker run -d --rm -p 8000:8000 --name app ghcr.io/${OWNER_LOWER}/flask-prom-grafana-devops:ci
           for i in {1..30}; do
             if curl -fsS http://localhost:8000/healthz >/dev/null; then echo "healthy"; break; fi
             sleep 1
@@ -45,7 +44,7 @@ jobs:
           curl -fsS http://localhost:8000/metrics | head -n 5
           docker rm -f app
 
-      # Build again and push (uses cache, so it’s quick)
+      # Build again and push
       - name: Build & push image
         uses: docker/build-push-action@v6
         with:
@@ -53,5 +52,6 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ env.OWNER }}/flask-prom-grafana-devops:latest
-            ghcr.io/${{ env.OWNER }}/flask-prom-grafana-devops:${{ github.sha }}
+            ghcr.io/${{ env.OWNER_LOWER }}/flask-prom-grafana-devops:latest
+            ghcr.io/${{ env.OWNER_LOWER }}/flask-prom-grafana-devops:${{ github.sha }}
+
