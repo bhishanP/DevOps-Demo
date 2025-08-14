@@ -1,27 +1,39 @@
 {
-  "annotations": {"list": []},
-  "editable": true,
+  "id": null,
+  "uid": "flask-overview",
+  "title": "Flask App - Overview",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "tags": ["flask", "prometheus"],
+  "templating": { "list": [] },
   "panels": [
     {
       "type": "timeseries",
-      "title": "Request Duration (p95)",
-      "targets": [{
-        "expr": "histogram_quantile(0.95, sum(rate(demo_request_duration_seconds_bucket[1m])) by (le))"
-      }],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      "title": "Requests per second",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(demo_requests_total[1m]))",
+          "legendFormat": "RPS",
+          "refId": "A"
+        }
+      ]
     },
     {
       "type": "timeseries",
-      "title": "Request Rate",
-      "targets": [{
-        "expr": "sum(rate(demo_requests_total[1m]))"
-      }],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      "title": "Request duration p95 (s)",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(demo_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "A"
+        }
+      ]
     }
-  ],
-  "schemaVersion": 38,
-  "style": "dark",
-  "time": {"from": "now-15m", "to": "now"},
-  "title": "Flask App - Overview",
-  "version": 1
+  ]
 }

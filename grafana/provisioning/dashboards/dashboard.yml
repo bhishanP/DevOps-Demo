@@ -1,8 +1,10 @@
 apiVersion: 1
 providers:
-  - name: 'Flask Demo Dashboards'
+  - name: 'default'
     orgId: 1
     folder: ''
     type: file
+    updateIntervalSeconds: 10
+    disableDeletion: true
     options:
       path: /var/lib/grafana/dashboards
