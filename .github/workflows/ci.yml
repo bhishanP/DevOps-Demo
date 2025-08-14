@@ -6,43 +6,58 @@ on:
 jobs:
   test-build-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
       - name: Run tests
         run: pytest -q
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Login to GHCR (optional)
-        if: ${{ secrets.GHCR_USERNAME && secrets.GHCR_TOKEN }}
+
+      - name: Login to GHCR (via GITHUB_TOKEN)
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ secrets.GHCR_USERNAME }}
-          password: ${{ secrets.GHCR_TOKEN }}
-      - name: Build & (optionally) push image
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          push: ${{ secrets.GHCR_USERNAME && secrets.GHCR_TOKEN }}
-          tags: ghcr.io/${{ github.repository_owner }}/flask-prom-grafana-devops:latest
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/flask-prom-grafana-devops:latest
+            ghcr.io/${{ github.repository_owner }}/flask-prom-grafana-devops:${{ github.sha }}
+
       - name: Set up kubectl (optional)
-        if: ${{ secrets.KUBE_CONFIG }}
+        if: ${{ env.KUBE_CONFIG != '' }}
         uses: azure/setup-kubectl@v4
+
       - name: Configure kubeconfig (optional)
-        if: ${{ secrets.KUBE_CONFIG }}
+        if: ${{ env.KUBE_CONFIG != '' }}
         run: |
           mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" > $HOME/.kube/config
+          echo "${{ env.KUBE_CONFIG }}" > $HOME/.kube/config
+
       - name: Deploy to Kubernetes (optional)
-        if: ${{ secrets.KUBE_CONFIG }}
+        if: ${{ env.KUBE_CONFIG != '' }}
         run: |
           kubectl apply -f k8s/deployment.yaml
           kubectl apply -f k8s/ingress.yaml || true
