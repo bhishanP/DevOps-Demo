@@ -11,6 +11,7 @@ jobs:
       packages: write
     env:
       OWNER: ${{ github.repository_owner }}
+      REPO: ${{ github.repository_owner }}/${{ github.event.repository.name }}
       KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
     steps:
       - uses: actions/checkout@v4
@@ -54,22 +55,3 @@ jobs:
           tags: |
             ghcr.io/${{ env.OWNER }}/flask-prom-grafana-devops:latest
             ghcr.io/${{ env.OWNER }}/flask-prom-grafana-devops:${{ github.sha }}
-
-      # --- Optional deploy ---
-      - name: Set up kubectl
-        if: ${{ env.KUBE_CONFIG != '' }}
-        uses: azure/setup-kubectl@v4
-
-      - name: Configure kubeconfig
-        if: ${{ env.KUBE_CONFIG != '' }}
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ env.KUBE_CONFIG }}" > $HOME/.kube/config
-
-      - name: Deploy to Kubernetes
-        if: ${{ env.KUBE_CONFIG != '' }}
-        run: |
-          kubectl apply -f k8s/deployment.yaml
-          kubectl apply -f k8s/ingress.yaml || true
-          kubectl apply -f k8s/hpa.yaml || true
-          kubectl rollout status deploy/flask-prom-grafana-devops
