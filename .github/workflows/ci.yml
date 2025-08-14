@@ -57,10 +57,6 @@ jobs:
             ghcr.io/${{ env.OWNER_LOWER }}/flask-prom-grafana-devops:latest
             ghcr.io/${{ env.OWNER_LOWER }}/flask-prom-grafana-devops:${{ github.sha }}
 
-      - name: Set up kubectl
-        if: ${{ env.KUBE_CONFIG != '' }}
-        uses: azure/setup-kubectl@v4
-
       - name: Write kubeconfig
         if: ${{ env.KUBE_CONFIG != '' }}
         run: |
