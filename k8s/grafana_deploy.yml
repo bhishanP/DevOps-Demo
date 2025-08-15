@@ -20,13 +20,22 @@ spec:
           ports:
             - containerPort: 3000
           volumeMounts:
-            - { name: provisioning, mountPath: /etc/grafana/provisioning }
-            - { name: dashboards,   mountPath: /var/lib/grafana/dashboards }
+            - name: ds
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
       volumes:
-        - name: provisioning
-          configMap: { name: grafana-provisioning }
+        - name: ds
+          configMap:
+            name: grafana-datasources
+        - name: provider
+          configMap:
+            name: grafana-dashboard-provider
         - name: dashboards
-          configMap: { name: grafana-dashboards }
+          configMap:
+            name: grafana-dashboards
 ---
 apiVersion: v1
 kind: Service

@@ -12,13 +12,18 @@ jobs:
       packages: write
     env:
       OWNER_LOWER: bhishanp
-      KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
 
     steps:
+      # Clean checkout to avoid stale files
       - uses: actions/checkout@v4
+        with:
+          clean: true
+          fetch-depth: 0
 
-      - name: Set up Docker Buildx
+      - name: Set up Docker Buildx (debug)
         uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-flags: --debug
 
       - name: Login to GHCR (via GITHUB_TOKEN)
         uses: docker/login-action@v3
@@ -27,69 +32,102 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build locally first for smoke test
+      # -------- Build & Smoke Test (local) --------
       - name: Build image (local)
+        env:
+          BUILDKIT_PROGRESS: plain
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           load: true
+          pull: true
           tags: ghcr.io/${{ env.OWNER_LOWER }}/flask-prom-grafana-devops:ci
 
       - name: Smoke test container
         run: |
+          set -euxo pipefail
           docker run -d --rm -p 8000:8000 --name app ghcr.io/${OWNER_LOWER}/flask-prom-grafana-devops:ci
           for i in {1..30}; do
-            if curl -fsS http://localhost:8000/healthz >/dev/null; then echo "healthy"; break; fi
-            sleep 1
+            curl -fsS http://localhost:8000/healthz && break || sleep 1
           done
-          curl -fsS http://localhost:8000/metrics | head -n 5
+          curl -v http://localhost:8000/metrics | head -n 20
+          docker logs app || true
           docker rm -f app
 
-      # Build again and push (uses cache)
+      # -------- Build & Push to GHCR --------
       - name: Build & push image
+        env:
+          BUILDKIT_PROGRESS: plain
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           push: true
+          pull: true
           tags: |
             ghcr.io/${{ env.OWNER_LOWER }}/flask-prom-grafana-devops:latest
             ghcr.io/${{ env.OWNER_LOWER }}/flask-prom-grafana-devops:${{ github.sha }}
 
-      # --- Deploy Flask app ---
+      # -------- Deploy App to local K8s --------
       - name: Deploy app manifests
         run: |
-          kubectl apply -f k8s/deployment.yaml
-          kubectl apply -f k8s/ingress.yaml || true
-          kubectl apply -f k8s/hpa.yaml || true
+          set -euxo pipefail
+          kubectl apply -v=5 -f k8s/deployment.yaml
+          kubectl apply -v=5 -f k8s/ingress.yaml || true
+          kubectl apply -v=5 -f k8s/hpa.yaml || true
 
-      - name: Set image to this commit
+      - name: Set image to this commit & wait
         run: |
+          set -euxo pipefail
           kubectl set image deploy/flask-prom-grafana-devops \
             web=ghcr.io/${{ env.OWNER_LOWER }}/flask-prom-grafana-devops:${{ github.sha }}
           kubectl rollout status deploy/flask-prom-grafana-devops
 
-      # --- Deploy Prometheus & Grafana ---
+      # -------- Sanity: required monitoring manifests present --------
+      - name: Verify monitoring manifests exist
+        run: |
+          set -euxo pipefail
+          echo "PWD=$(pwd)"; ls -la
+          ls -la k8s
+          test -f k8s/prometheus_deploy.yml
+          test -f k8s/grafana_deploy.yml
+          # also verify provisioning trees
+          ls -la grafana/provisioning/datasources
+          ls -la grafana/provisioning/dashboards
+          ls -la grafana/dashboards
+          test -f prometheus/prometheus.yml
+
+      # -------- Deploy Prometheus & Grafana (provisioned) --------
       - name: Deploy monitoring (Prometheus & Grafana)
         run: |
+          set -euxo pipefail
+
+          # Namespace
           kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
 
-          # Turn your repo folders into ConfigMaps
+          # Prometheus config (expects prometheus/prometheus.yml in repo)
           kubectl create configmap prometheus-config -n monitoring \
             --from-file=prometheus/prometheus.yml \
             --dry-run=client -o yaml | kubectl apply -f -
 
-          kubectl create configmap grafana-provisioning -n monitoring \
-            --from-file=grafana/provisioning \
+          # Grafana provisioning: create separate CMs for each subdir
+          kubectl create configmap grafana-datasources -n monitoring \
+            --from-file=grafana/provisioning/datasources \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create configmap grafana-dashboard-provider -n monitoring \
+            --from-file=grafana/provisioning/dashboards \
             --dry-run=client -o yaml | kubectl apply -f -
 
           kubectl create configmap grafana-dashboards -n monitoring \
             --from-file=grafana/dashboards \
             --dry-run=client -o yaml | kubectl apply -f -
 
+          # Deployments & Services for monitoring stack
           kubectl apply -f k8s/prometheus_deploy.yml
           kubectl apply -f k8s/grafana_deploy.yml
 
+          # Wait for rollouts
           kubectl -n monitoring rollout status deploy/prometheus
           kubectl -n monitoring rollout status deploy/grafana
