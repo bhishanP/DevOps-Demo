@@ -32,23 +32,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # -------- Build & Smoke Test (local) --------
+      # Build locally first for smoke test
       - name: Build image (local)
-        env:
-          BUILDKIT_PROGRESS: plain
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           load: true
-          pull: true
           tags: ghcr.io/${{ env.OWNER_LOWER }}/flask-prom-grafana-devops:ci
 
       - name: Smoke test container
         run: |
-          set -euxo pipefail
           docker run -d --rm -p 8000:8000 --name app ghcr.io/${OWNER_LOWER}/flask-prom-grafana-devops:ci
-          docker logs app || true
+          for i in {1..30}; do
+            if curl -fsS http://localhost:8000/healthz >/dev/null; then echo "healthy"; break; fi
+            sleep 1
+          done
+          curl -fsS http://localhost:8000/metrics | head -n 5
           docker rm -f app
 
       # -------- Build & Push to GHCR --------
