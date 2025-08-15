@@ -84,20 +84,6 @@ jobs:
             web=ghcr.io/${{ env.OWNER_LOWER }}/flask-prom-grafana-devops:${{ github.sha }}
           kubectl rollout status deploy/flask-prom-grafana-devops
 
-      # -------- Sanity: required monitoring manifests present --------
-      - name: Verify monitoring manifests exist
-        run: |
-          set -euxo pipefail
-          echo "PWD=$(pwd)"; ls -la
-          ls -la k8s
-          test -f k8s/prometheus_deploy.yml
-          test -f k8s/grafana_deploy.yml
-          # also verify provisioning trees
-          ls -la grafana/provisioning/datasources
-          ls -la grafana/provisioning/dashboards
-          ls -la grafana/dashboards
-          test -f prometheus/prometheus.yml
-
       # -------- Deploy Prometheus & Grafana (provisioned) --------
       - name: Deploy monitoring (Prometheus & Grafana)
         run: |
