@@ -43,6 +43,7 @@ jobs:
 
       - name: Smoke test container
         run: |
+          docker rm -f app || true
           docker run -d --rm -p 8000:8000 --name app ghcr.io/${OWNER_LOWER}/flask-prom-grafana-devops:ci
           for i in {1..30}; do
             if curl -fsS http://localhost:8000/healthz >/dev/null; then echo "healthy"; break; fi
