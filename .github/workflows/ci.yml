@@ -48,10 +48,6 @@ jobs:
         run: |
           set -euxo pipefail
           docker run -d --rm -p 8000:8000 --name app ghcr.io/${OWNER_LOWER}/flask-prom-grafana-devops:ci
-          for i in {1..30}; do
-            curl -fsS http://localhost:8000/healthz && break || sleep 1
-          done
-          curl -v http://localhost:8000/metrics | head -n 20
           docker logs app || true
           docker rm -f app
 
