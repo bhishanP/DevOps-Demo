@@ -15,3 +15,5 @@ def test_metrics():
     m = client.get("/metrics")
     assert m.status_code == 200
     assert b"demo_requests_total" in m.data
+
+# This file is used by the testing framework to run the tests (Not Use for Now)

@@ -5,7 +5,7 @@ from prometheus_client import Counter, Histogram
 
 metrics_info = {
     "app_name": "flask-prom-grafana-devops",
-    "version": "0.1.0",
+    "version": "1.1.0",
     "env": "dev"
 }
 
@@ -40,4 +40,5 @@ def create_app():
 
     return app
 
+# Create the Flask app
 app = create_app()
